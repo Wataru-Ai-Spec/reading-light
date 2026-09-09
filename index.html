@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>読書灯</title>
+<meta name="theme-color" content="#000000">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="icon" href="icon.svg">
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    overflow: hidden; background: #000;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
+  }
+
+  #light {
+    position: fixed; inset: 0;
+    background: hsl(40, 55%, 60%);
+    transition: background-color 0.15s ease;
+  }
+
+  #tapCatcher {
+    position: fixed; inset: 0; z-index: 5;
+  }
+
+  #panel {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    z-index: 10;
+    padding: 24px 20px calc(28px + env(safe-area-inset-bottom));
+    background: rgba(0,0,0,0.55);
+    backdrop-filter: blur(6px);
+    color: #fff;
+    transition: transform 0.35s ease, opacity 0.35s ease;
+    transform: translateY(0);
+    opacity: 1;
+  }
+  #panel.hidden {
+    transform: translateY(100%);
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .row { margin-bottom: 20px; }
+  .label {
+    font-size: 14px; opacity: 0.85; margin-bottom: 8px;
+    display: flex; justify-content: space-between;
+  }
+
+  input[type="range"] {
+    width: 100%; height: 36px;
+    -webkit-appearance: none; appearance: none;
+    background: transparent;
+  }
+  input[type="range"]::-webkit-slider-runnable-track {
+    height: 8px; border-radius: 4px;
+    background: rgba(255,255,255,0.25);
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 28px; height: 28px; border-radius: 50%;
+    background: #fff; margin-top: -10px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+  }
+  input[type="range"]::-moz-range-track {
+    height: 8px; border-radius: 4px;
+    background: rgba(255,255,255,0.25);
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: #fff; border: none;
+  }
+
+  .timerBtns {
+    display: flex; gap: 8px; flex-wrap: wrap;
+  }
+  .timerBtn {
+    flex: 1 1 auto;
+    min-width: 60px;
+    padding: 12px 8px;
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.3);
+    background: rgba(255,255,255,0.08);
+    color: #fff;
+    font-size: 15px;
+    text-align: center;
+  }
+  .timerBtn.active {
+    background: rgba(255,255,255,0.9);
+    color: #111;
+    font-weight: 600;
+  }
+
+  #timerStatus {
+    font-size: 13px; opacity: 0.8; margin-top: 10px; min-height: 18px;
+  }
+
+  #hint {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 4;
+    text-align: center; padding-top: max(16px, env(safe-area-inset-top));
+    color: rgba(0,0,0,0.35);
+    font-size: 13px;
+    transition: opacity 0.35s ease;
+  }
+  #hint.hidden { opacity: 0; }
+
+  #offOverlay {
+    position: fixed; inset: 0; z-index: 20;
+    background: #000;
+    display: flex; align-items: center; justify-content: center;
+    color: rgba(255,255,255,0.6);
+    font-size: 15px;
+    opacity: 0; pointer-events: none;
+    transition: opacity 1.2s ease;
+  }
+  #offOverlay.show { opacity: 1; pointer-events: auto; }
+</style>
+</head>
+<body>
+
+<div id="light"></div>
+<div id="hint">画面をタップして明るさ・タイマーを表示</div>
+<div id="tapCatcher"></div>
+
+<div id="panel">
+  <div class="row">
+    <div class="label"><span>明るさ</span><span id="brightnessValue">60%</span></div>
+    <input type="range" id="brightness" min="10" max="100" value="60">
+  </div>
+  <div class="row">
+    <div class="label"><span>消灯タイマー</span></div>
+    <div class="timerBtns">
+      <div class="timerBtn" data-min="15">15分</div>
+      <div class="timerBtn" data-min="30">30分</div>
+      <div class="timerBtn" data-min="45">45分</div>
+      <div class="timerBtn" data-min="60">60分</div>
+      <div class="timerBtn" data-min="0">なし</div>
+    </div>
+    <div id="timerStatus"></div>
+  </div>
+</div>
+
+<div id="offOverlay">
+  <div>おやすみなさい<br><span style="font-size:13px;opacity:0.7;">画面をタップすると点灯します</span></div>
+</div>
+
+<script>
+  const light = document.getElementById('light');
+  const panel = document.getElementById('panel');
+  const hint = document.getElementById('hint');
+  const tapCatcher = document.getElementById('tapCatcher');
+  const brightnessInput = document.getElementById('brightness');
+  const brightnessValue = document.getElementById('brightnessValue');
+  const timerBtns = document.querySelectorAll('.timerBtn');
+  const timerStatus = document.getElementById('timerStatus');
+  const offOverlay = document.getElementById('offOverlay');
+
+  const STORAGE_KEY = 'reading-light-brightness';
+
+  function applyBrightness(val) {
+    const lightness = Math.round(15 + (val / 100) * 65);
+    light.style.backgroundColor = `hsl(40, 55%, ${lightness}%)`;
+    brightnessValue.textContent = val + '%';
+  }
+
+  const savedBrightness = localStorage.getItem(STORAGE_KEY);
+  if (savedBrightness) {
+    brightnessInput.value = savedBrightness;
+  }
+  applyBrightness(brightnessInput.value);
+
+  brightnessInput.addEventListener('input', () => {
+    applyBrightness(brightnessInput.value);
+    localStorage.setItem(STORAGE_KEY, brightnessInput.value);
+  });
+
+  let panelVisible = true;
+  let hideTimeout = null;
+
+  function showPanel() {
+    panel.classList.remove('hidden');
+    hint.classList.add('hidden');
+    panelVisible = true;
+    resetHideTimer();
+  }
+
+  function hidePanel() {
+    panel.classList.add('hidden');
+    hint.classList.remove('hidden');
+    panelVisible = false;
+  }
+
+  function resetHideTimer() {
+    clearTimeout(hideTimeout);
+    hideTimeout = setTimeout(hidePanel, 4000);
+  }
+
+  tapCatcher.addEventListener('click', (e) => {
+    if (offOverlay.classList.contains('show')) {
+      turnOn();
+      return;
+    }
+    if (panelVisible) {
+      hidePanel();
+    } else {
+      showPanel();
+    }
+  });
+
+  panel.addEventListener('click', (e) => e.stopPropagation());
+  resetHideTimer();
+
+  let timerId = null;
+  let timerEndAt = null;
+  let statusIntervalId = null;
+
+  function clearActiveTimer() {
+    clearTimeout(timerId);
+    clearInterval(statusIntervalId);
+    timerId = null;
+    timerEndAt = null;
+    timerStatus.textContent = '';
+    timerBtns.forEach(b => b.classList.remove('active'));
+  }
+
+  function updateStatusText() {
+    if (!timerEndAt) return;
+    const remainMs = timerEndAt - Date.now();
+    if (remainMs <= 0) {
+      timerStatus.textContent = '';
+      return;
+    }
+    const totalSec = Math.ceil(remainMs / 1000);
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    timerStatus.textContent = `消灯まで ${m}分${s.toString().padStart(2, '0')}秒`;
+  }
+
+  function turnOff() {
+    offOverlay.classList.add('show');
+    clearActiveTimer();
+  }
+
+  function turnOn() {
+    offOverlay.classList.remove('show');
+    showPanel();
+  }
+
+  timerBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const min = parseInt(btn.dataset.min, 10);
+      clearActiveTimer();
+      if (min === 0) return;
+      btn.classList.add('active');
+      timerEndAt = Date.now() + min * 60 * 1000;
+      timerId = setTimeout(turnOff, min * 60 * 1000);
+      statusIntervalId = setInterval(updateStatusText, 1000);
+      updateStatusText();
+    });
+  });
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+</script>
+
+</body>
+</html>

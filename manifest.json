@@ -1,0 +1,19 @@
+{
+  "name": "読書灯",
+  "short_name": "読書灯",
+  "description": "寝る前用のシンプルな読書灯アプリ",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
