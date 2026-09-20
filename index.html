@@ -94,6 +94,15 @@
     font-weight: 600;
   }
 
+  .colorBtns { display: flex; gap: 12px; }
+  .colorBtn {
+    flex: 1 1 0; height: 44px; border-radius: 10px;
+    border: 2px solid rgba(255,255,255,0.25);
+    display: flex; align-items: flex-end; justify-content: center;
+    font-size: 11px; color: rgba(0,0,0,0.65); padding-bottom: 3px;
+  }
+  .colorBtn.active { border-color: #fff; box-shadow: 0 0 0 2px rgba(255,255,255,0.6); }
+
   #timerStatus {
     font-size: 13px; opacity: 0.8; margin-top: 10px; min-height: 18px;
   }
@@ -131,6 +140,16 @@
     <input type="range" id="brightness" min="10" max="100" value="60">
   </div>
   <div class="row">
+    <div class="label"><span>色合い</span></div>
+    <div class="colorBtns">
+      <div class="colorBtn" data-color="moon" style="background:hsl(40,55%,65%)">月</div>
+      <div class="colorBtn" data-color="bulb" style="background:hsl(32,80%,60%)">電球</div>
+      <div class="colorBtn" data-color="amber" style="background:hsl(20,90%,55%)">琥珀</div>
+      <div class="colorBtn" data-color="white" style="background:hsl(210,12%,90%)">白</div>
+      <div class="colorBtn" data-color="red" style="background:hsl(0,80%,50%)">赤</div>
+    </div>
+  </div>
+  <div class="row">
     <div class="label"><span>消灯タイマー</span></div>
     <div class="timerBtns">
       <div class="timerBtn" data-min="15">15分</div>
@@ -160,10 +179,24 @@
 
   const STORAGE_KEY = 'reading-light-brightness';
 
+  const COLORS = {
+    moon:  { h: 40,  s: 55 },
+    bulb:  { h: 32,  s: 80 },
+    amber: { h: 20,  s: 90 },
+    white: { h: 210, s: 12 },
+    red:   { h: 0,   s: 80 }
+  };
+  const COLOR_KEY = 'reading-light-color';
+  const colorBtns = document.querySelectorAll('.colorBtn');
+  let currentColor = localStorage.getItem(COLOR_KEY);
+  if (!COLORS[currentColor]) currentColor = 'moon';
+
   function applyBrightness(val) {
+    const c = COLORS[currentColor];
     const lightness = Math.round(15 + (val / 100) * 65);
-    light.style.backgroundColor = `hsl(40, 55%, ${lightness}%)`;
+    light.style.backgroundColor = `hsl(${c.h}, ${c.s}%, ${lightness}%)`;
     brightnessValue.textContent = val + '%';
+    colorBtns.forEach(b => b.classList.toggle('active', b.dataset.color === currentColor));
   }
 
   const savedBrightness = localStorage.getItem(STORAGE_KEY);
@@ -176,6 +209,12 @@
     applyBrightness(brightnessInput.value);
     localStorage.setItem(STORAGE_KEY, brightnessInput.value);
   });
+
+  colorBtns.forEach(b => b.addEventListener('click', () => {
+    currentColor = b.dataset.color;
+    localStorage.setItem(COLOR_KEY, currentColor);
+    applyBrightness(brightnessInput.value);
+  }));
 
   let panelVisible = true;
   let hideTimeout = null;
