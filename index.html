@@ -239,13 +239,43 @@
     timerStatus.textContent = `消灯まで ${m}分${s.toString().padStart(2, '0')}秒`;
   }
 
+  let wakeLock = null;
+  let keepAwake = true;
+
+  async function requestWakeLock() {
+    if (!keepAwake || !('wakeLock' in navigator) || wakeLock) return;
+    try {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+    } catch (e) {
+      wakeLock = null;
+    }
+  }
+
+  function releaseWakeLock() {
+    if (wakeLock) {
+      wakeLock.release().catch(() => {});
+      wakeLock = null;
+    }
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') requestWakeLock();
+  });
+  document.addEventListener('click', requestWakeLock);
+  requestWakeLock();
+
   function turnOff() {
     offOverlay.classList.add('show');
     clearActiveTimer();
+    keepAwake = false;
+    releaseWakeLock();
   }
 
   function turnOn() {
     offOverlay.classList.remove('show');
+    keepAwake = true;
+    requestWakeLock();
     showPanel();
   }
 
